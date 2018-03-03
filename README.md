@@ -11,10 +11,16 @@ Goloader provide some infomation to the runtime and gc of go, making itself work
 
 Goloader reuses the runtime, much smaller and unloadable.
 
+## Build
+
+First execute the following command, goloader relys on internal package, which is forbbiden by go compiler.
+```
+cp -r $GOROOT/src/cmd/internal $GOROOT/src/cmd/objfile
+```
+
 ## Example
 
 ```
-cp -r $GOROOT/src/cmd/internal $GOROOT/src/cmd/objfile
 go build github.com/dearplain/goloader/examples/loader
 
 go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/schedule/schedule.go
