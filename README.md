@@ -5,7 +5,7 @@ Goloader can load and run golang code at runtime.
 
 Goloader works like linker, it relocates the address of symbols in object file, generates runnable code, reusing the runtime function and the type pointer of loader.
 
-Goloader provide some infomation to the runtime and gc of go, making itself works correctly with them.
+Goloader provide some information to the runtime and gc of go, making itself works correctly with them.
 
 ## Compare with plugin
 
@@ -13,7 +13,7 @@ Goloader reuses the runtime, much smaller and unloadable.
 
 ## Build
 
-First execute the following command, goloader relys on internal package, which is forbbiden by go compiler.
+First execute the following command, goloader relies on internal package, which is forbidden by go compiler.
 ```
 cp -r $GOROOT/src/cmd/internal $GOROOT/src/cmd/objfile
 ```
