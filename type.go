@@ -64,6 +64,9 @@ func (t *_type) uncommon() *uncommonType
 //go:linkname (*_type).nameOff runtime.(*_type).nameOff
 func (t *_type) nameOff(off nameOff) name
 
+//go:linkname (*_type).typeOff runtime.(*_type).typeOff
+func (t *_type) typeOff(off typeOff) *_type
+
 //go:linkname name.name runtime.name.name
 func (n name) name() (s string)
 
@@ -84,6 +87,12 @@ func (t *_type) Type() reflect.Type {
 	(*interfaceHeader)(unsafe.Pointer(&obj)).word = unsafe.Pointer(t)
 	typ := obj.(reflect.Type)
 	return typ
+}
+
+func ToType(typ reflect.Type) *_type {
+	var obj interface{} = typ
+	typePtr := uintptr((*interfaceHeader)(unsafe.Pointer(&obj)).word)
+	return (*_type)(unsafe.Pointer(typePtr))
 }
 
 func GetFunctionName(i interface{}) string {
@@ -133,4 +142,35 @@ func regTypeInfo(symPtr map[string]uintptr, v reflect.Value) {
 	}
 	symPtr[symFullName] = ptr
 	// fmt.Println(symFullName, v.Kind())
+}
+
+//go:linkname getitab runtime.getitab
+func getitab(inter int, typ int, canfail bool) int
+
+func addIFaceSubFuncType(funcTypeMap map[string]*int, typemap map[typeOff]uintptr,
+	inter *interfacetype, dataBase int) {
+	pkgPath := inter.typ.PkgPath()
+	lastSlash := strings.LastIndexByte(pkgPath, '/')
+	var head = pkgPath
+	if lastSlash > -1 {
+		head = pkgPath[lastSlash+1:]
+	}
+	ni := len(inter.mhdr)
+	for k := 0; k < ni; k++ {
+		i := &inter.mhdr[k]
+		itype := inter.typ.typeOff(i.ityp)
+		name := itype.Name()
+		if name[0] == '*' {
+			name = name[1:]
+		}
+		name = strings.Replace(name, head+".", pkgPath+".", -1)
+		name = "type." + name
+		if symAddrPtr, ok := funcTypeMap[name]; ok {
+			itypePtr := int(uintptr(unsafe.Pointer(itype)))
+			*symAddrPtr = itypePtr
+			// fmt.Println(*symAddrPtr)
+			typemap[typeOff(itypePtr-dataBase)] = uintptr(itypePtr)
+			// fmt.Println(name, itypePtr-dataBase, itypePtr)
+		}
+	}
 }

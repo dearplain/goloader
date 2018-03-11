@@ -100,6 +100,21 @@ type CodeModule struct {
 	Module     *moduledata
 	pcfuncdata []findfuncbucket
 	stkmaps    [][]byte
+	itabs      []itabReloc
+	itabSyms   []itabSym
+	typemap    map[typeOff]uintptr
+}
+
+type itabSym struct {
+	ptr   int
+	inter int
+	_type int
+}
+
+type itabReloc struct {
+	locOff int
+	symOff int
+	pc     int
 }
 
 var (
@@ -235,7 +250,8 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 	}
 
 	var codeModule = CodeModule{
-		Syms: make(map[string]uintptr),
+		Syms:    make(map[string]uintptr),
+		typemap: make(map[typeOff]uintptr),
 	}
 	var errBuf bytes.Buffer
 
@@ -243,9 +259,10 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 	dataBase := base + len(code.Code)
 
 	var symAddrs = make([]int, len(code.Syms))
-
+	var itabIndexs []int
+	var funcTypeMap = make(map[string]*int)
 	for i, sym := range code.Syms {
-		if sym.Offset == -1 || strings.HasPrefix(sym.Name, "go.itab") {
+		if sym.Offset == -1 {
 			if ptr, ok := symPtr[sym.Name]; ok {
 				symAddrs[i] = int(ptr)
 			} else {
@@ -257,15 +274,46 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 		} else if sym.Kind == STEXT {
 			symAddrs[i] = code.Syms[i].Offset + base
 			codeModule.Syms[sym.Name] = uintptr(symAddrs[i])
+			// fmt.Println(sym.Name, symAddrs[i])
+		} else if strings.HasPrefix(sym.Name, "go.itab") {
+			if ptr, ok := symPtr[sym.Name]; ok {
+				symAddrs[i] = int(ptr)
+			} else {
+				itabIndexs = append(itabIndexs, i)
+			}
 		} else {
 			symAddrs[i] = code.Syms[i].Offset + dataBase
+
+			if strings.HasPrefix(sym.Name, "type.func") {
+				funcTypeMap[sym.Name] = &symAddrs[i]
+			}
 		}
+	}
+
+	var itabSymMap = make(map[string]int)
+	for _, itabIndex := range itabIndexs {
+		curSym := code.Syms[itabIndex]
+		sym1 := symAddrs[curSym.Reloc[0].SymOff]
+		// fmt.Println((*_type)(unsafe.Pointer(uintptr(sym1))).Name())
+		sym2 := symAddrs[curSym.Reloc[1].SymOff]
+		itabSymMap[curSym.Name] = len(codeModule.itabSyms)
+		codeModule.itabSyms = append(codeModule.itabSyms, itabSym{inter: sym1, _type: sym2})
+
+		addIFaceSubFuncType(funcTypeMap, codeModule.typemap,
+			(*interfacetype)(unsafe.Pointer(uintptr(sym1))), base)
 	}
 
 	for _, curSym := range code.Syms {
 		for _, loc := range curSym.Reloc {
 			sym := code.Syms[loc.SymOff]
 			if symAddrs[loc.SymOff] == -1 {
+				continue
+			}
+			if symAddrs[loc.SymOff] == 0 && strings.HasPrefix(sym.Name, "go.itab") {
+				// fmt.Println("itab type", curSym.Kind, loc.Type)
+				codeModule.itabs = append(codeModule.itabs,
+					itabReloc{locOff: loc.Offset, symOff: itabSymMap[sym.Name],
+						pc: base + loc.Offset + loc.Size - loc.Add})
 				continue
 			}
 
@@ -299,10 +347,9 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 
 			case R_ADDROFF, R_WEAKADDROFF, R_METHODOFF:
 				var relocByte = code.Data
-				var addrBase = dataBase
+				var addrBase = base
 				if curSym.Kind == STEXT {
-					addrBase = base
-					relocByte = code.Code
+					fmt.Println("impossible?")
 				}
 				offset = symAddrs[loc.SymOff] - addrBase + loc.Add
 				binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
@@ -325,9 +372,9 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 	module.minpc = (uintptr)(unsafe.Pointer(&codeByte[0]))
 	module.maxpc = (uintptr)(unsafe.Pointer(&codeByte[len(code.Code)-1])) + 2
 	module.filetab = code.Mod.filetab
-	module.typemap = make(map[typeOff]uintptr)
-	module.types = uintptr(dataBase)
-	module.etypes = uintptr(dataBase + len(code.Data))
+	module.typemap = codeModule.typemap
+	module.types = uintptr(base)
+	module.etypes = uintptr(base + codeLen)
 	module.text = uintptr(base)
 	module.etext = uintptr(base + len(code.Code))
 	codeModule.pcfuncdata = code.Mod.pcfunc // hold reference
@@ -400,6 +447,18 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 	copy(codeByte, code.Code)
 	copy(codeByte[len(code.Code):], code.Data)
 	codeModule.CodeByte = codeByte
+
+	for i := range codeModule.itabSyms {
+		it := &codeModule.itabSyms[i]
+		it.ptr = getitab(it.inter, it._type, false)
+		// fmt.Println((*_type)(unsafe.Pointer(uintptr(it._type))).Name())
+	}
+	for _, it := range codeModule.itabs {
+		// fmt.Println(it, codeModule.itabSyms[it.symOff].Ptr-it.pc)
+		binary.LittleEndian.PutUint32(codeByte[it.locOff:],
+			uint32(codeModule.itabSyms[it.symOff].ptr-it.pc))
+	}
+
 	if errBuf.Len() > 0 {
 		return &codeModule, errors.New(errBuf.String())
 	}
