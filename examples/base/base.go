@@ -82,6 +82,8 @@ func main() {
 		whatAmI("hey")
 	}
 
+	recoverTest()
+
 	{
 		pos, neg := adder(), adder()
 		for i := 0; i < 10; i++ {
@@ -91,8 +93,6 @@ func main() {
 			)
 		}
 	}
-
-	recoverTest()
 
 }
 

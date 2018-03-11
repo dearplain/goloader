@@ -54,7 +54,8 @@ func main() {
 	goloader.RegTypes(symPtr, reflect.ValueOf(0))
 	// most of time you don't need to register function, but if loader complain about it, you have to.
 	goloader.RegTypes(symPtr, http.ListenAndServe, http.Dir("/"),
-		http.Handler(http.FileServer(http.Dir("/"))), http.FileServer, http.HandleFunc)
+		http.Handler(http.FileServer(http.Dir("/"))), http.FileServer, http.HandleFunc,
+		&http.Request{})
 
 	codeModule, err := goloader.Load(reloc, symPtr)
 	if err != nil {
