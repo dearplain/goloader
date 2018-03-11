@@ -129,7 +129,7 @@ type funcInfoData struct {
 
 type stackmap struct {
 	n        int32   // number of bitmaps
-	nbit     int32   // number of bits in each bitmap  这个参数不知道怎么拿
+	nbit     int32   // number of bits in each bitmap
 	bytedata [1]byte // bitmaps, each starting on a byte boundary
 }
 
