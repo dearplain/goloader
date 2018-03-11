@@ -13,6 +13,8 @@ Goloader reuses the runtime, much smaller and unloadable.
 
 ## Build
 
+**Make sure you're using go 1.8, 1.9.**
+
 First execute the following command, goloader relies on internal package, which is forbidden by go compiler.
 ```
 cp -r $GOROOT/src/cmd/internal $GOROOT/src/cmd/objfile
