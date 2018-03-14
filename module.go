@@ -4,6 +4,7 @@ import (
 	"cmd/objfile/goobj"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"unsafe"
 )
@@ -304,4 +305,122 @@ func dumpStackMap(f interface{}) {
 	fmt.Println(funcname(finfo))
 	stkmap := (*stackmap)(funcdata(finfo, _FUNCDATA_LocalsPointerMaps))
 	fmt.Printf("%v %p\n", stkmap, stkmap)
+}
+
+type moduledata110 struct {
+	pclntable    []byte
+	ftab         []functab
+	filetab      []uint32
+	findfunctab  uintptr
+	minpc, maxpc uintptr
+
+	text, etext           uintptr
+	noptrdata, enoptrdata uintptr
+	data, edata           uintptr
+	bss, ebss             uintptr
+	noptrbss, enoptrbss   uintptr
+	end, gcdata, gcbss    uintptr
+	types, etypes         uintptr
+
+	textsectmap []textsect
+	typelinks   []int32 // offsets from types
+	itablinks   []*itab
+
+	ptab []ptabEntry
+
+	pluginpath string
+	pkghashes  []modulehash
+
+	modulename   string
+	modulehashes []modulehash
+
+	hasmain uint8 // 1 if module contains the main function, 0 otherwise
+
+	gcdatamask, gcbssmask bitvector
+
+	typemap map[typeOff]uintptr // offset to *_rtype in previous module
+
+	bad bool // module failed to load and should be ignored
+
+	next *moduledata110
+}
+
+func moduledataTo110(m110 *moduledata110, m *moduledata) {
+	m110.pclntable = m.pclntable
+	m110.ftab = m.ftab
+	m110.filetab = m.filetab
+	m110.filetab = m.filetab
+	m110.findfunctab = m.findfunctab
+	m110.minpc = m.minpc
+	m110.maxpc = m.maxpc
+	m110.text = m.text
+	m110.etext = m.etext
+	m110.typemap = m.typemap
+	m110.types = m.types
+	m110.etypes = m.etypes
+}
+
+func linkModule(first uintptr, offset uintptr, newModule uintptr) {
+	for datap := first; ; {
+		p := (*uintptr)(unsafe.Pointer(datap + offset))
+		nextdatap := *p
+		if nextdatap == 0 {
+			*p = newModule
+			break
+		}
+		datap = nextdatap
+	}
+}
+
+func unlinkModule(first uintptr, offset uintptr, module uintptr) {
+	prevp := first
+	for datap := first; datap != 0; {
+		p := (*uintptr)(unsafe.Pointer(datap + offset))
+		nextdatap := *p
+		if datap == module {
+			pp := (*uintptr)(unsafe.Pointer(prevp + offset))
+			*pp = nextdatap
+		}
+		prevp = datap
+		datap = nextdatap
+	}
+}
+
+func addModule(codeModule *CodeModule, m *moduledata, goVer string) {
+	switch goVer[:5] {
+	case "go1.8", "go1.9":
+		tmpModule = m
+		modules[tmpModule] = true
+		offset := uintptr(unsafe.Pointer(&m.next)) - uintptr(unsafe.Pointer(m))
+		linkModule(uintptr(unsafe.Pointer(&firstmoduledata)),
+			offset, reflect.ValueOf(tmpModule).Pointer())
+	case "go1.1":
+		var m110 moduledata110
+		moduledataTo110(&m110, m)
+		tmpModule = &m110
+		modules[tmpModule] = true
+		offset := uintptr(unsafe.Pointer(&m110.next)) - uintptr(unsafe.Pointer(&m110))
+		linkModule(uintptr(unsafe.Pointer(&firstmoduledata)),
+			offset, reflect.ValueOf(tmpModule).Pointer())
+	default:
+		panic("unsupported go version: " + goVer)
+	}
+	codeModule.Module = tmpModule
+}
+
+func removeModule(module interface{}, goVer string) {
+	var offset uintptr
+	switch goVer[:5] {
+	case "go1.8", "go1.9":
+		var m moduledata
+		offset = uintptr(unsafe.Pointer(&m.next)) - uintptr(unsafe.Pointer(&m))
+	case "go1.1":
+		var m110 moduledata110
+		offset = uintptr(unsafe.Pointer(&m110.next)) - uintptr(unsafe.Pointer(&m110))
+	default:
+		panic("unsupported go version: " + goVer)
+	}
+	unlinkModule(uintptr(unsafe.Pointer(&firstmoduledata)), offset,
+		reflect.ValueOf(module).Pointer())
+	delete(modules, module)
 }

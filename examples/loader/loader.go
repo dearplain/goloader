@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"runtime"
 	"time"
 	"unsafe"
 
@@ -52,6 +53,7 @@ func main() {
 
 	goloader.RegTypes(symPtr, time.Duration(0))
 	goloader.RegTypes(symPtr, reflect.ValueOf(0))
+	goloader.RegTypes(symPtr, runtime.LockOSThread)
 	// most of time you don't need to register function, but if loader complain about it, you have to.
 	goloader.RegTypes(symPtr, http.ListenAndServe, http.Dir("/"),
 		http.Handler(http.FileServer(http.Dir("/"))), http.FileServer, http.HandleFunc,

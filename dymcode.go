@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -97,7 +98,7 @@ type CodeReloc struct {
 type CodeModule struct {
 	Syms       map[string]uintptr
 	CodeByte   []byte
-	Module     *moduledata
+	Module     interface{}
 	pcfuncdata []findfuncbucket
 	stkmaps    [][]byte
 	itabs      []itabReloc
@@ -118,12 +119,12 @@ type itabReloc struct {
 }
 
 var (
-	fmodule     *moduledata
-	tmpModule   *moduledata
+	tmpModule   interface{}
+	modules     = make(map[interface{}]bool)
 	modulesLock sync.Mutex
 )
 
-func ReadObj(f io.ReadSeeker) (*CodeReloc, error) {
+func ReadObj(f *os.File) (*CodeReloc, error) {
 	obj, err := goobj.Parse(f, "main")
 	if err != nil {
 		return nil, fmt.Errorf("read error: %v", err)
@@ -215,18 +216,18 @@ func relocSym(reloc *CodeReloc, f io.ReadSeeker, sym *goobj.Sym,
 			exSym.Offset = -1
 			if re.Type == R_TLS_LE {
 				exSym.Name = TLSNAME
-				exSym.Offset = re.Offset
+				exSym.Offset = int(re.Offset)
 			}
 			if re.Type == R_CALLIND {
 				exSym.Offset = 0
-				exSym.Name = "R_CALLIND"
+				exSym.Name = R_CALLIND_NAME
 			}
 			symOff = addSym(symMap, &reloc.Syms, &exSym)
 		}
 		rsym.Reloc = append(rsym.Reloc,
-			Reloc{Offset: re.Offset + rsym.Offset, SymOff: symOff,
+			Reloc{Offset: int(re.Offset) + rsym.Offset, SymOff: symOff,
 				Type: int(re.Type),
-				Size: re.Size, Add: re.Add})
+				Size: int(re.Size), Add: int(re.Add)})
 	}
 	reloc.Syms[curSymOffset].Reloc = rsym.Reloc
 
@@ -425,23 +426,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 	}
 
 	modulesLock.Lock()
-	var firstModule = &firstmoduledata
-	tmpModule = &module
-	if fmodule != nil {
-		firstModule = fmodule
-	} else {
-		fmodule = tmpModule
-	}
-	for datap := firstModule; ; {
-		nextdatap := datap.next
-		if nextdatap == nil {
-			datap.next = tmpModule
-			break
-		}
-		datap = nextdatap
-	}
-	codeModule.Module = tmpModule
-	tmpModule = nil
+	addModule(&codeModule, &module, runtime.Version())
 	modulesLock.Unlock()
 
 	copy(codeByte, code.Code)
@@ -477,18 +462,7 @@ func copy2Slice(dst []byte, src unsafe.Pointer, size int) {
 func (cm *CodeModule) Unload() {
 	runtime.GC()
 	modulesLock.Lock()
-	prevp := &firstmoduledata
-	for datap := &firstmoduledata; datap != nil; {
-		nextdatap := datap.next
-		if datap == cm.Module {
-			prevp.next = nextdatap
-		}
-		prevp = datap
-		datap = nextdatap
-	}
-	if fmodule == cm.Module && fmodule != nil {
-		fmodule = fmodule.next
-	}
+	removeModule(cm.Module, runtime.Version())
 	modulesLock.Unlock()
 	munmap(cm.CodeByte)
 }

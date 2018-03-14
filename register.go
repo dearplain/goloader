@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	TLSNAME = "(TLS)"
+	TLSNAME        = "(TLS)"
+	R_CALLIND_NAME = "R_CALLIND"
 )
 
 type interfaceHeader struct {
@@ -35,8 +36,9 @@ func block()
 // RegSymbol register common types for relocation
 func RegSymbol(symPtr map[string]uintptr) {
 
+	var int0 = int(0)
 	RegTypes(symPtr, int(0), int8(0), int16(0), int32(0),
-		int64(0), uint(0), uint8(0), uint16(0), uint32(0), uint64(0), true,
+		int64(0), uint(0), uint8(0), uint16(0), uint32(0), uint64(0), true, &int0,
 		"", []byte{}, []uint{}, []int{}, uintptr(0), make(chan bool, 1), unsafe.Pointer(&symPtr))
 	RegFunc(symPtr, "runtime.block", block)
 
