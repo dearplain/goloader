@@ -1,11 +1,13 @@
 
 Goloader can load and run golang code at runtime.
 
-## How it work?
+## How it works?
 
 Goloader works like linker, it relocates the address of symbols in object file, generates runnable code, reusing the runtime function and the type pointer of loader.
 
 Goloader provide some information to the runtime and gc of go, making itself works correctly with them.
+
+Goloader is not script engine, it reads the output of go compiler and make them runnable. All features of go are supported, and run as fast and light as native.
 
 ## Compare with plugin
 
@@ -13,7 +15,7 @@ Goloader reuses the runtime, much smaller and unloadable.
 
 ## Build
 
-**Make sure you're using go 1.8, 1.9.**
+**Make sure you're using go >= 1.8.**
 
 First execute the following command, goloader relies on internal package, which is forbidden by go compiler.
 ```
@@ -37,4 +39,4 @@ go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/http/http.go
 
 ## Warning
 
-Currently only tests and develops on golang 1.9 (x64/x86, darwin, linux, windows), be aware of golang's internal structs change, especially moduledata struct.
+Currently only tests and develops on golang 1.8, 1.9, 1.10 (x64/x86, darwin, linux, windows), be aware of golang's internal structs change, especially moduledata struct.
