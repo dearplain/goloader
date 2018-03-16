@@ -1,28 +1,28 @@
 
-Goloader can load and run golang code at runtime.
+Goloader can load and run Golang code at runtime.
 
-## How it works?
+## How does it work?
 
-Goloader works like linker, it relocates the address of symbols in object file, generates runnable code, reusing the runtime function and the type pointer of loader.
+Goloader works like a linker: it relocates the address of symbols in an object file, generates runnable code, and then reuses the runtime function and the type pointer of the loader.
 
-Goloader provide some information to the runtime and gc of go, making itself works correctly with them.
+Goloader provides some information to the runtime and gc of Go, which allows it to work correctly with them.
 
-Goloader is not script engine, it reads the output of go compiler and make them runnable. All features of go are supported, and run as fast and light as native.
+Please note that Goloader is not a scripting engine. It reads the output of Go compiler and makes them runnable. All features of Go are supported, and run just as fast and lightweight as native Go code.
 
-## Compare with plugin
+## Comparison with plugin package
 
-Goloader reuses the runtime, much smaller and unloadable.
+Goloader reuses the Go runtime, which makes it much smaller and unloadable.
 
 ## Build
 
 **Make sure you're using go >= 1.8.**
 
-First execute the following command, goloader relies on internal package, which is forbidden by go compiler.
+First, execute the following command. Goloader relies on the internal package, which is forbidden by the Go compiler.
 ```
 cp -r $GOROOT/src/cmd/internal $GOROOT/src/cmd/objfile
 ```
 
-## Example
+## Examples
 
 ```
 go build github.com/dearplain/goloader/examples/loader
@@ -39,4 +39,5 @@ go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/http/http.go
 
 ## Warning
 
-Currently only tests and develops on golang 1.8, 1.9, 1.10 (x64/x86, darwin, linux, windows), be aware of golang's internal structs change, especially moduledata struct.
+This has currently only been tested and developed on Golang 1.8, 1.9, and 1.10 (x64/x86, darwin, linux, windows).
+Be aware of Golang's internal structs change, especially the moduledata struct.
