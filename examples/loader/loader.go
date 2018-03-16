@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -27,6 +28,7 @@ func main() {
 	var pkgpath = flag.String("p", "main", "package path")
 	var parseFile = flag.String("parse", "", "parse go object file")
 	var run = flag.String("run", "main.main", "run function")
+	var times = flag.Int("times", 1, "run count")
 
 	flag.Parse()
 
@@ -47,7 +49,6 @@ func main() {
 	}
 	defer f.Close()
 
-	reloc, _ := goloader.ReadObj(f)
 	symPtr := make(map[string]uintptr)
 	goloader.RegSymbol(symPtr)
 
@@ -58,18 +59,23 @@ func main() {
 	goloader.RegTypes(symPtr, http.ListenAndServe, http.Dir("/"),
 		http.Handler(http.FileServer(http.Dir("/"))), http.FileServer, http.HandleFunc,
 		&http.Request{})
+	w := sync.WaitGroup{}
+	goloader.RegTypes(symPtr, w, w.Wait)
 
-	codeModule, err := goloader.Load(reloc, symPtr)
-	if err != nil {
-		fmt.Println("Load error:", err)
+	reloc, _ := goloader.ReadObj(f)
+
+	for i := 0; i < *times; i++ {
+		codeModule, err := goloader.Load(reloc, symPtr)
+		if err != nil {
+			fmt.Println("Load error:", err)
+		}
+		runFuncPtr := codeModule.Syms[*run]
+		funcPtrContainer := (uintptr)(unsafe.Pointer(&runFuncPtr))
+		runFunc := *(*func())(unsafe.Pointer(&funcPtrContainer))
+		runFunc()
+		codeModule.Unload()
 	}
 
-	runFuncPtr := codeModule.Syms[*run]
-	funcPtrContainer := (uintptr)(unsafe.Pointer(&runFuncPtr))
-	runFunc := *(*func())(unsafe.Pointer(&funcPtrContainer))
-	runFunc()
-
-	codeModule.Unload()
 }
 
 func parse(file, pkgpath *string) {
