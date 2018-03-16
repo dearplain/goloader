@@ -11,7 +11,7 @@ Please note that Goloader is not a scripting engine. It reads the output of Go c
 
 ## Comparison with plugin package
 
-Goloader reuses the Go runtime, which makes it much smaller and unloadable.
+Goloader reuses the Go runtime, which makes it much smaller. And code loaded by Goloader is unloadable.
 
 ## Build
 
@@ -28,7 +28,7 @@ cp -r $GOROOT/src/cmd/internal $GOROOT/src/cmd/objfile
 go build github.com/dearplain/goloader/examples/loader
 
 go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/schedule/schedule.go
-./loader -o schedule.o -run main.main
+./loader -o schedule.o -run main.main -times 10
 
 go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/base/base.go
 ./loader -o base.o -run main.main
