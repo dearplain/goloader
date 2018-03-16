@@ -392,7 +392,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 			pclnOff += 4
 		}
 		module.ftab[i].funcoff = uintptr(pclnOff)
-		fi := &code.Mod.funcinfo[i-1]
+		fi := code.Mod.funcinfo[i-1]
 		fi.entry = module.ftab[i].entry
 		copy2Slice(module.pclntable[pclnOff:],
 			unsafe.Pointer(&fi._func), _funcSize)
@@ -405,8 +405,10 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 			pclnOff += size
 		}
 
-		for i, v := range fi.funcdata {
-			fi.funcdata[i] = (uintptr)(unsafe.Pointer(&(code.Mod.stkmaps[v][0])))
+		var funcdata = make([]uintptr, len(fi.funcdata))
+		copy(funcdata, fi.funcdata)
+		for i, v := range funcdata {
+			funcdata[i] = (uintptr)(unsafe.Pointer(&(code.Mod.stkmaps[v][0])))
 		}
 		ptr := (uintptr)(unsafe.Pointer(&module.pclntable[pclnOff-1])) + 1
 		if PtrSize == 8 && ptr&4 != 0 {
@@ -416,7 +418,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 		}
 		funcDataSize := int(PtrSize * fi.nfuncdata)
 		copy2Slice(module.pclntable[pclnOff:],
-			unsafe.Pointer(&fi.funcdata[0]), funcDataSize)
+			unsafe.Pointer(&funcdata[0]), funcDataSize)
 		pclnOff += funcDataSize
 
 	}
