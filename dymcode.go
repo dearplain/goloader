@@ -222,6 +222,14 @@ func relocSym(reloc *CodeReloc, f io.ReadSeeker, sym *goobj.Sym,
 				exSym.Offset = 0
 				exSym.Name = R_CALLIND_NAME
 			}
+			if strings.HasPrefix(exSym.Name, "type..importpath.") {
+				path := strings.TrimLeft(exSym.Name, "type..importpath.")
+				path = strings.Trim(path, ".")
+				pathb := []byte(path)
+				pathb = append(pathb, 0)
+				exSym.Offset = len(reloc.Data)
+				reloc.Data = append(reloc.Data, pathb...)
+			}
 			symOff = addSym(symMap, &reloc.Syms, &exSym)
 		}
 		rsym.Reloc = append(rsym.Reloc,
