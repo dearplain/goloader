@@ -88,6 +88,7 @@ type Reloc struct {
 	Add    int
 }
 
+// CodeReloc dispatch and load CodeReloc struct via network is OK
 type CodeReloc struct {
 	Code []byte
 	Data []byte
@@ -283,7 +284,6 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 		} else if sym.Kind == STEXT {
 			symAddrs[i] = code.Syms[i].Offset + base
 			codeModule.Syms[sym.Name] = uintptr(symAddrs[i])
-			// fmt.Println(sym.Name, symAddrs[i])
 		} else if strings.HasPrefix(sym.Name, "go.itab") {
 			if ptr, ok := symPtr[sym.Name]; ok {
 				symAddrs[i] = int(ptr)
@@ -303,7 +303,6 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 	for _, itabIndex := range itabIndexs {
 		curSym := code.Syms[itabIndex]
 		sym1 := symAddrs[curSym.Reloc[0].SymOff]
-		// fmt.Println((*_type)(unsafe.Pointer(uintptr(sym1))).Name())
 		sym2 := symAddrs[curSym.Reloc[1].SymOff]
 		itabSymMap[curSym.Name] = len(codeModule.itabSyms)
 		codeModule.itabSyms = append(codeModule.itabSyms, itabSym{inter: sym1, _type: sym2})
@@ -319,7 +318,6 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 				continue
 			}
 			if symAddrs[loc.SymOff] == 0 && strings.HasPrefix(sym.Name, "go.itab") {
-				// fmt.Println("itab type", curSym.Kind, loc.Type)
 				codeModule.itabs = append(codeModule.itabs,
 					itabReloc{locOff: loc.Offset, symOff: itabSymMap[sym.Name],
 						pc: base + loc.Offset + loc.Size - loc.Add})
@@ -342,7 +340,6 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 				if offset > 2147483647 || offset < -2147483647 {
 					errBuf.WriteString(fmt.Sprint("offset overflow:", offset, "sym:", sym.Name, "\n"))
 				}
-				// fmt.Println(curSym.Name, sym.Name, addrBase, symAddrs[loc.SymOff], offset, loc.Type, loc.Offset)
 				binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
 			case R_ADDR:
 				var relocByte = code.Data
@@ -350,7 +347,6 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 					relocByte = code.Code
 				}
 				offset = symAddrs[loc.SymOff] + loc.Add
-				// fmt.Println(curSym.Name, sym.Name, sym.Offset, symAddrs[loc.SymOff], loc.Add, offset)
 				*(*uintptr)(unsafe.Pointer(&(relocByte[loc.Offset:][0]))) = uintptr(offset)
 			case R_CALLIND:
 
@@ -358,12 +354,11 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 				var relocByte = code.Data
 				var addrBase = base
 				if curSym.Kind == STEXT {
-					fmt.Println("impossible?")
+					strWrite(&errBuf, "impossible!", sym.Name, "locate on code segment", "\n")
 				}
 				offset = symAddrs[loc.SymOff] - addrBase + loc.Add
 				binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
 			default:
-				// fmt.Println("unknown reloc type:", loc.Type, sym.Name)
 				strWrite(&errBuf, "unknown reloc type:", strconv.Itoa(loc.Type), sym.Name, "\n")
 			}
 
@@ -446,12 +441,13 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 	for i := range codeModule.itabSyms {
 		it := &codeModule.itabSyms[i]
 		it.ptr = getitab(it.inter, it._type, false)
-		// fmt.Println((*_type)(unsafe.Pointer(uintptr(it._type))).Name())
 	}
 	for _, it := range codeModule.itabs {
-		// fmt.Println(it, codeModule.itabSyms[it.symOff].Ptr-it.pc)
-		binary.LittleEndian.PutUint32(codeByte[it.locOff:],
-			uint32(codeModule.itabSyms[it.symOff].ptr-it.pc))
+		offset := codeModule.itabSyms[it.symOff].ptr - it.pc
+		if offset > 2147483647 || offset < -2147483647 {
+			errBuf.WriteString(fmt.Sprint("itab offset overflow:", offset, "sym:", "\n"))
+		}
+		binary.LittleEndian.PutUint32(codeByte[it.locOff:], uint32(offset))
 	}
 
 	if errBuf.Len() > 0 {
