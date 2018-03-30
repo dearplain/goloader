@@ -4,9 +4,11 @@ go:
   - 1.9
   - master 
 
+before_install:
+  - cp -r $GOROOT/src/cmd/internal $GOROOT/src/cmd/objfile
+
 script:
   - go get github.com/kr/pretty
-  - cp -r $GOROOT/src/cmd/internal $GOROOT/src/cmd/objfile
   - go build github.com/dearplain/goloader/examples/loader
   - go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/base/base.go
   - ./loader -o base.o -run main.main
