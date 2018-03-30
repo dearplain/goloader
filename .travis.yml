@@ -4,6 +4,9 @@ go:
   - 1.9
   - master 
 
+notifications:
+  email: false
+
 before_install:
   - cp -r $GOROOT/src/cmd/internal $GOROOT/src/cmd/objfile
 
