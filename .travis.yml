@@ -1,5 +1,7 @@
 language: go
 
+sudo: required
+
 go:
   - 1.9
   - master 
@@ -9,6 +11,7 @@ notifications:
 
 before_install:
   - cp -r $GOROOT/src/cmd/internal $GOROOT/src/cmd/objfile
+  - sudo sysctl -w vm.mmap_min_addr="4096"
 
 script:
   - go get github.com/kr/pretty
