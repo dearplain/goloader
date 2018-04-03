@@ -253,7 +253,8 @@ func strWrite(buf *bytes.Buffer, str ...string) {
 }
 
 func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
-	codeLen := len(code.Code) + len(code.Data)
+	pCodeLen := len(code.Code) + len(code.Data)
+	codeLen := int(float32(pCodeLen) * 1.5)
 	codeByte, err := mmap(codeLen)
 	if err != nil {
 		return nil, err
@@ -311,6 +312,11 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 			(*interfacetype)(unsafe.Pointer(uintptr(sym1))), base)
 	}
 
+	var armcode = []byte{0x00, 0xF0, 0x9F, 0xE5, 0x00, 0x00, 0x00, 0x00}
+	var x86code = []byte{0x48, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xe0}
+	var movcode byte = 0x8b
+	var leacode byte = 0x8d
+	var jmpOff = pCodeLen
 	for _, curSym := range code.Syms {
 		for _, loc := range curSym.Reloc {
 			sym := code.Syms[loc.SymOff]
@@ -338,9 +344,46 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 				}
 				offset = symAddrs[loc.SymOff] - (addrBase + loc.Offset + loc.Size) + loc.Add
 				if offset > 2147483647 || offset < -2147483647 {
-					errBuf.WriteString(fmt.Sprint("offset overflow:", offset, "sym:", sym.Name, "\n"))
+					if loc.Type == R_CALL {
+						offset = (base + jmpOff) - (addrBase + loc.Offset + loc.Size)
+						copy(codeByte[jmpOff:], x86code)
+						binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
+						binary.LittleEndian.PutUint32(codeByte[jmpOff+2:], uint32(symAddrs[loc.SymOff]+loc.Add))
+						jmpOff += len(x86code)
+					} else if relocByte[loc.Offset-2:][0] == leacode {
+						offset = (base + jmpOff) - (addrBase + loc.Offset + loc.Size)
+						binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
+						relocByte[loc.Offset-2:][0] = movcode
+						binary.LittleEndian.PutUint32(codeByte[jmpOff:], uint32(symAddrs[loc.SymOff]+loc.Add))
+						jmpOff += 8
+					} else {
+						binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
+					}
+					if jmpOff > codeLen {
+						fmt.Println("len overflow", "sym:", sym.Name)
+					}
+					continue
 				}
 				binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
+			case R_CALLARM:
+				offset = ((base + jmpOff) - (base + loc.Offset + 8)) / 4
+				var v = uint32(offset)
+				b := code.Code[loc.Offset:]
+				b[0] = byte(v)
+				b[1] = byte(v >> 8)
+				b[2] = byte(v >> 16)
+				copy(codeByte[jmpOff:], armcode)
+				add := loc.Add & 0xffffff
+				if add > 256 {
+					add = 0
+				} else {
+					add += 2
+				}
+				binary.LittleEndian.PutUint32(codeByte[jmpOff+4:], uint32(symAddrs[loc.SymOff]+add*4))
+				jmpOff += len(armcode)
+				if jmpOff > codeLen {
+					fmt.Println("len overflow", "sym:", sym.Name)
+				}
 			case R_ADDR:
 				var relocByte = code.Data
 				if curSym.Kind == STEXT {
