@@ -1,4 +1,8 @@
 
+# Goloader
+
+[![Build Status](https://travis-ci.org/dearplain/goloader.svg?branch=master)](https://travis-ci.org/dearplain/goloader)
+
 Goloader can load and run Golang code at runtime.
 
 ## How does it work?
@@ -9,7 +13,7 @@ Goloader provides some information to the runtime and gc of Go, which allows it 
 
 Please note that Goloader is not a scripting engine. It reads the output of Go compiler and makes them runnable. All features of Go are supported, and run just as fast and lightweight as native Go code.
 
-## Comparison with plugin package
+## Comparison with plugin
 
 Goloader reuses the Go runtime, which makes it much smaller. And code loaded by Goloader is unloadable.
 
@@ -17,7 +21,7 @@ Goloader reuses the Go runtime, which makes it much smaller. And code loaded by 
 
 **Make sure you're using go >= 1.8.**
 
-First, execute the following command. Goloader relies on the internal package, which is forbidden by the Go compiler.
+First, execute the following command, then do build and test. This is because Goloader relies on the internal package, which is forbidden by the Go compiler.
 ```
 cp -r $GOROOT/src/cmd/internal $GOROOT/src/cmd/objfile
 ```
