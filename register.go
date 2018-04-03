@@ -55,23 +55,27 @@ func RegSymbol(symPtr map[string]uintptr) {
 		} else if strings.HasPrefix(sym.Name, "runtime.") {
 			symPtr[sym.Name] = uintptr(sym.Addr)
 		} else if strings.HasPrefix(sym.Name, "go.itab") {
-			symPtr[sym.Name] = uintptr(sym.Addr)
-			bs := strings.TrimLeft(sym.Name, "go.itab.")
-			bss := strings.Split(bs, ",")
-			ptrs := *(*[2]uintptr)(unsafe.Pointer(uintptr(sym.Addr)))
-			for i, ptr := range ptrs {
-				typeName := bss[len(bss)-i-1]
-				if typeName[0] == '*' {
-					var obj interface{} = reflect.TypeOf(0)
-					(*interfaceHeader)(unsafe.Pointer(&obj)).word = unsafe.Pointer(ptr)
-					typ := obj.(reflect.Type).Elem()
-					obj = typ
-					typePtr := uintptr((*interfaceHeader)(unsafe.Pointer(&obj)).word)
-					symPtr["type."+typeName[1:]] = typePtr
-				}
-				symPtr["type."+typeName] = ptr
-			}
+			RegItab(symPtr, sym.Name, uintptr(sym.Addr))
 		}
+	}
+}
+
+func RegItab(symPtr map[string]uintptr, name string, addr uintptr) {
+	symPtr[name] = uintptr(addr)
+	bs := strings.TrimLeft(name, "go.itab.")
+	bss := strings.Split(bs, ",")
+	ptrs := *(*[2]uintptr)(unsafe.Pointer(addr))
+	for i, ptr := range ptrs {
+		typeName := bss[len(bss)-i-1]
+		if typeName[0] == '*' {
+			var obj interface{} = reflect.TypeOf(0)
+			(*interfaceHeader)(unsafe.Pointer(&obj)).word = unsafe.Pointer(ptr)
+			typ := obj.(reflect.Type).Elem()
+			obj = typ
+			typePtr := uintptr((*interfaceHeader)(unsafe.Pointer(&obj)).word)
+			symPtr["type."+typeName[1:]] = typePtr
+		}
+		symPtr["type."+typeName] = ptr
 	}
 }
 
