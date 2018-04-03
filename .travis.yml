@@ -1,20 +1,18 @@
 language: go
 
-sudo: required
-
 go:
   - 1.9
-  - master 
+  - 1.8
+  - master
 
 notifications:
   email: false
 
 before_install:
   - cp -r $GOROOT/src/cmd/internal $GOROOT/src/cmd/objfile
-  - sudo sysctl -w vm.mmap_min_addr="4096"
+  - go get github.com/kr/pretty
 
 script:
-  - go get github.com/kr/pretty
   - go build github.com/dearplain/goloader/examples/loader
   - go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/base/base.go
   - ./loader -o base.o -run main.main
