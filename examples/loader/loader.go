@@ -64,6 +64,7 @@ func main() {
 
 	reloc, _ := goloader.ReadObj(f)
 
+	var mmapByte []byte
 	for i := 0; i < *times; i++ {
 		codeModule, err := goloader.Load(reloc, symPtr)
 		if err != nil {
@@ -74,6 +75,19 @@ func main() {
 		runFunc := *(*func())(unsafe.Pointer(&funcPtrContainer))
 		runFunc()
 		codeModule.Unload()
+
+		// a strict test, try to make mmap random
+		if mmapByte == nil {
+			mmapByte, err = goloader.Mmap(1024)
+			if err != nil {
+				fmt.Println(err)
+			}
+			b := make([]byte, 1024)
+			copy(mmapByte, b) // reset all bytes
+		} else {
+			goloader.Munmap(mmapByte)
+			mmapByte = nil
+		}
 	}
 
 }

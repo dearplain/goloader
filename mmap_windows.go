@@ -6,7 +6,7 @@ import (
 	"unsafe"
 )
 
-func mmap(size int) ([]byte, error) {
+func Mmap(size int) ([]byte, error) {
 
 	sizelo := uint32(size >> 32)
 	sizehi := uint32(size) & 0xffffffff
@@ -36,7 +36,7 @@ func mmap(size int) ([]byte, error) {
 	return b, nil
 }
 
-func munmap(b []byte) error {
+func Munmap(b []byte) error {
 
 	addr := (uintptr)(unsafe.Pointer(&b[0]))
 	if err := syscall.UnmapViewOfFile(addr); err != nil {

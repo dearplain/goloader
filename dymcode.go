@@ -255,7 +255,7 @@ func strWrite(buf *bytes.Buffer, str ...string) {
 func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 	pCodeLen := len(code.Code) + len(code.Data)
 	codeLen := int(float32(pCodeLen) * 1.5)
-	codeByte, err := mmap(codeLen)
+	codeByte, err := Mmap(codeLen)
 	if err != nil {
 		return nil, err
 	}
@@ -344,6 +344,10 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 				}
 				offset = symAddrs[loc.SymOff] - (addrBase + loc.Offset + loc.Size) + loc.Add
 				if offset > 2147483647 || offset < -2147483647 {
+					if jmpOff+8 > codeLen {
+						strWrite(&errBuf, "len overflow", "sym:", sym.Name, "\n")
+						continue
+					}
 					rb := relocByte[loc.Offset-2:]
 					if loc.Type == R_CALL {
 						offset = (base + jmpOff) - (addrBase + loc.Offset + loc.Size)
@@ -361,13 +365,14 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 						strWrite(&errBuf, "offset overflow sym:", sym.Name, "\n")
 						binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
 					}
-					if jmpOff > codeLen {
-						fmt.Println("len overflow", "sym:", sym.Name)
-					}
 					continue
 				}
 				binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
 			case R_CALLARM:
+				if jmpOff+4 > codeLen {
+					strWrite(&errBuf, "len overflow", "sym:", sym.Name, "\n")
+					continue
+				}
 				offset = ((base + jmpOff) - (base + loc.Offset + 8)) / 4
 				var v = uint32(offset)
 				b := code.Code[loc.Offset:]
@@ -383,9 +388,6 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 				}
 				binary.LittleEndian.PutUint32(codeByte[jmpOff+4:], uint32(symAddrs[loc.SymOff]+add*4))
 				jmpOff += len(armcode)
-				if jmpOff > codeLen {
-					fmt.Println("len overflow", "sym:", sym.Name)
-				}
 			case R_ADDR:
 				var relocByte = code.Data
 				if curSym.Kind == STEXT {
@@ -488,9 +490,15 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 		it.ptr = getitab(it.inter, it._type, false)
 	}
 	for _, it := range codeModule.itabs {
-		offset := codeModule.itabSyms[it.symOff].ptr - it.pc
+		symAddr := codeModule.itabSyms[it.symOff].ptr
+		offset := symAddr - it.pc
 		if offset > 2147483647 || offset < -2147483647 {
-			errBuf.WriteString(fmt.Sprint("itab offset overflow:", offset, "sym:", "\n"))
+			offset = (base + jmpOff) - it.pc
+			binary.LittleEndian.PutUint32(codeByte[it.locOff:], uint32(offset))
+			codeByte[it.locOff-2:][0] = movcode
+			*(*uintptr)(unsafe.Pointer(&(codeByte[jmpOff:][0]))) = uintptr(symAddr)
+			jmpOff += PtrSize
+			continue
 		}
 		binary.LittleEndian.PutUint32(codeByte[it.locOff:], uint32(offset))
 	}
@@ -515,5 +523,5 @@ func (cm *CodeModule) Unload() {
 	modulesLock.Lock()
 	removeModule(cm.Module, runtime.Version())
 	modulesLock.Unlock()
-	munmap(cm.CodeByte)
+	Munmap(cm.CodeByte)
 }

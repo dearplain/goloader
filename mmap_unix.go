@@ -7,7 +7,7 @@ import (
 	"syscall"
 )
 
-func mmap(size int) ([]byte, error) {
+func Mmap(size int) ([]byte, error) {
 	data, err := syscall.Mmap(
 		0,
 		0,
@@ -20,7 +20,7 @@ func mmap(size int) ([]byte, error) {
 	return data, err
 }
 
-func munmap(b []byte) (err error) {
+func Munmap(b []byte) (err error) {
 	err = syscall.Munmap(b)
 	if err != nil {
 		err = os.NewSyscallError("syscall.Munmap", err)
