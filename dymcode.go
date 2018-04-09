@@ -312,7 +312,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 			(*interfacetype)(unsafe.Pointer(uintptr(sym1))), base)
 	}
 
-	var armcode = []byte{0x00, 0xF0, 0x9F, 0xE5, 0x00, 0x00, 0x00, 0x00}
+	var armcode = []byte{0x04, 0xF0, 0x1F, 0xE5, 0x00, 0x00, 0x00, 0x00}
 	var x86code = []byte{0xff, 0x25, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 	var movcode byte = 0x8b
 	var leacode byte = 0x8d
@@ -369,25 +369,38 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 				}
 				binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
 			case R_CALLARM:
-				if jmpOff+4 > codeLen {
-					strWrite(&errBuf, "len overflow", "sym:", sym.Name, "\n")
-					continue
-				}
-				offset = ((base + jmpOff) - (base + loc.Offset + 8)) / 4
-				var v = uint32(offset)
-				b := code.Code[loc.Offset:]
-				b[0] = byte(v)
-				b[1] = byte(v >> 8)
-				b[2] = byte(v >> 16)
-				copy(codeByte[jmpOff:], armcode)
 				add := loc.Add & 0xffffff
 				if add > 256 {
 					add = 0
 				} else {
 					add += 2
 				}
-				binary.LittleEndian.PutUint32(codeByte[jmpOff+4:], uint32(symAddrs[loc.SymOff]+add*4))
-				jmpOff += len(armcode)
+				offset = (symAddrs[loc.SymOff] - (base + loc.Offset + 8) + add) / 4
+				if offset > 0x7fffff || offset < -0x7fffff {
+					if jmpOff+4 > codeLen {
+						strWrite(&errBuf, "len overflow", "sym:", sym.Name, "\n")
+						continue
+					}
+					align := jmpOff % 4
+					if align != 0 {
+						jmpOff += (4 - align)
+					}
+					offset = (jmpOff - (loc.Offset + 8)) / 4
+					var v = uint32(offset)
+					b := code.Code[loc.Offset:]
+					b[0] = byte(v)
+					b[1] = byte(v >> 8)
+					b[2] = byte(v >> 16)
+					copy(codeByte[jmpOff:], armcode)
+					binary.LittleEndian.PutUint32(codeByte[jmpOff+4:], uint32(symAddrs[loc.SymOff]+add*4))
+					jmpOff += len(armcode)
+					continue
+				}
+				b := code.Code[loc.Offset:]
+				var v = uint32(offset)
+				b[0] = byte(v)
+				b[1] = byte(v >> 8)
+				b[2] = byte(v >> 16)
 			case R_ADDR:
 				var relocByte = code.Data
 				if curSym.Kind == STEXT {
