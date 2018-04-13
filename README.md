@@ -17,6 +17,8 @@ Please note that Goloader is not a scripting engine. It reads the output of Go c
 
 Goloader reuses the Go runtime, which makes it much smaller. And code loaded by Goloader is unloadable.
 
+Goloader is debuggable, and supports pprof tool(Yes, you can see code loaded by Goloader in pprof).
+
 ## Build
 
 **Make sure you're using go >= 1.8.**
@@ -39,6 +41,16 @@ go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/base/base.go
 
 go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/http/http.go
 ./loader -o http.o -run main.main
+
+#build multiple go files
+go tool compile -I $GOPATH/pkg/darwin_amd64 1.go 2.go
+
+#build for arm
+GOOS=linux GOARCH=arm GOARM=5 go install fmt runtime sync net/http time
+GOOS=linux GOARCH=arm GOARM=5 go build github.com/dearplain/goloader/examples/loader
+GOOS=linux GOARCH=arm GOARM=5 go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/base/base.go
+#test on arm linux
+./loader -o base.o -run main.main
 ```
 
 ## Warning
