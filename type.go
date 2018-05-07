@@ -117,8 +117,9 @@ func regTypeInfo(symPtr map[string]uintptr, v reflect.Value) {
 	var ptr uintptr
 	var typePrefix string
 	var symName string
-	if v.Kind() == reflect.Func {
-		ptr = *(*uintptr)(unsafe.Pointer(header.word))
+	pptr := (uintptr)(header.word)
+	if v.Kind() == reflect.Func && pptr != 0 {
+		ptr = *(*uintptr)(header.word)
 		symName = GetFunctionName(ins)
 	} else {
 		ptr = uintptr(header.typ)
