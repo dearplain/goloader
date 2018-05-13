@@ -303,6 +303,11 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 			if strings.HasPrefix(sym.Name, "type.func") {
 				funcTypeMap[sym.Name] = &symAddrs[i]
 			}
+			if strings.HasPrefix(sym.Name, "type.") {
+				if ptr, ok := symPtr[sym.Name]; ok {
+					symAddrs[i] = int(ptr)
+				}
+			}
 		}
 	}
 
