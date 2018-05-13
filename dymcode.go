@@ -121,6 +121,7 @@ type itabReloc struct {
 	symOff  int
 	size    int
 	locType int
+	add     int
 }
 
 var (
@@ -332,7 +333,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 			if symAddrs[loc.SymOff] == 0 && strings.HasPrefix(sym.Name, "go.itab") {
 				codeModule.itabs = append(codeModule.itabs,
 					itabReloc{locOff: loc.Offset, symOff: itabSymMap[sym.Name],
-						size: loc.Size, locType: loc.Type})
+						size: loc.Size, locType: loc.Type, add: loc.Add})
 				continue
 			}
 
@@ -533,9 +534,9 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 		switch it.locType {
 		case R_PCREL:
 			pc := base + it.locOff + it.size
-			offset := symAddr - pc
+			offset := symAddr - pc + it.add
 			if offset > 2147483647 || offset < -2147483647 {
-				offset = (base + jmpOff) - pc
+				offset = (base + jmpOff) - pc + it.add
 				binary.LittleEndian.PutUint32(codeByte[it.locOff:], uint32(offset))
 				codeByte[it.locOff-2:][0] = movcode
 				*(*uintptr)(unsafe.Pointer(&(codeByte[jmpOff:][0]))) = uintptr(symAddr)
