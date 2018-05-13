@@ -45,11 +45,11 @@ go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/http/http.go
 #build multiple go files
 go tool compile -I $GOPATH/pkg/darwin_amd64 1.go 2.go
 
-#build for arm
+#build for arm32
 GOOS=linux GOARCH=arm GOARM=5 go install fmt runtime sync net/http time
 GOOS=linux GOARCH=arm GOARM=5 go build github.com/dearplain/goloader/examples/loader
 GOOS=linux GOARCH=arm GOARM=5 go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/base/base.go
-#test on arm linux
+#test on arm32 linux
 ./loader -o base.o -run main.main
 ```
 
