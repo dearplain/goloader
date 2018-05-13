@@ -34,6 +34,9 @@ const (
 	R_CALLIND   = 11
 	R_PCREL     = 15
 	R_ADDR      = 1
+	// R_ADDRARM64 relocates an adrp, add pair to compute the address of the
+	// referenced symbol.
+	R_ADDRARM64 = 3
 	// R_ADDROFF resolves to a 32-bit offset from the beginning of the section
 	// holding the data being relocated to the referenced symbol.
 	R_ADDROFF = 5
@@ -114,15 +117,17 @@ type itabSym struct {
 }
 
 type itabReloc struct {
-	locOff int
-	symOff int
-	pc     int
+	locOff  int
+	symOff  int
+	size    int
+	locType int
 }
 
 var (
 	tmpModule   interface{}
 	modules     = make(map[interface{}]bool)
 	modulesLock sync.Mutex
+	mov32bit    = [8]byte{0x00, 0x00, 0x80, 0xD2, 0x00, 0x00, 0xA0, 0xF2}
 )
 
 func ReadObj(f *os.File) (*CodeReloc, error) {
@@ -313,6 +318,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 	}
 
 	var armcode = []byte{0x04, 0xF0, 0x1F, 0xE5, 0x00, 0x00, 0x00, 0x00}
+	var arm64code = []byte{0x43, 0x00, 0x00, 0x58, 0x60, 0x00, 0x1F, 0xD6, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 	var x86code = []byte{0xff, 0x25, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 	var movcode byte = 0x8b
 	var leacode byte = 0x8d
@@ -326,7 +332,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 			if symAddrs[loc.SymOff] == 0 && strings.HasPrefix(sym.Name, "go.itab") {
 				codeModule.itabs = append(codeModule.itabs,
 					itabReloc{locOff: loc.Offset, symOff: itabSymMap[sym.Name],
-						pc: base + loc.Offset + loc.Size - loc.Add})
+						size: loc.Size, locType: loc.Type})
 				continue
 			}
 
@@ -343,7 +349,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 					relocByte = code.Code
 				}
 				offset = symAddrs[loc.SymOff] - (addrBase + loc.Offset + loc.Size) + loc.Add
-				if offset > 2147483647 || offset < -2147483647 {
+				if offset > 0x7fffffff || offset < -0x7fffffff {
 					if jmpOff+8 > codeLen {
 						strWrite(&errBuf, "len overflow", "sym:", sym.Name, "\n")
 						continue
@@ -368,14 +374,19 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 					continue
 				}
 				binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
-			case R_CALLARM:
-				add := loc.Add & 0xffffff
-				if add > 256 {
-					add = 0
-				} else {
-					add += 2
+			case R_CALLARM, R_CALLARM64:
+				var add = loc.Add
+				var pcOff = 0
+				if loc.Type == R_CALLARM {
+					add = loc.Add & 0xffffff
+					if add > 256 {
+						add = 0
+					} else {
+						add += 2
+					}
+					pcOff = 8
 				}
-				offset = (symAddrs[loc.SymOff] - (base + loc.Offset + 8) + add) / 4
+				offset = (symAddrs[loc.SymOff] - (base + loc.Offset + pcOff) + add) / 4
 				if offset > 0x7fffff || offset < -0x7fffff {
 					if jmpOff+4 > codeLen {
 						strWrite(&errBuf, "len overflow", "sym:", sym.Name, "\n")
@@ -385,22 +396,37 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 					if align != 0 {
 						jmpOff += (4 - align)
 					}
-					offset = (jmpOff - (loc.Offset + 8)) / 4
+					offset = (jmpOff - (loc.Offset + pcOff)) / 4
 					var v = uint32(offset)
 					b := code.Code[loc.Offset:]
 					b[0] = byte(v)
 					b[1] = byte(v >> 8)
 					b[2] = byte(v >> 16)
-					copy(codeByte[jmpOff:], armcode)
-					binary.LittleEndian.PutUint32(codeByte[jmpOff+4:], uint32(symAddrs[loc.SymOff]+add*4))
-					jmpOff += len(armcode)
+					var jmpLocOff = 0
+					var jmpLen = 0
+					if loc.Type == R_CALLARM64 {
+						copy(codeByte[jmpOff:], arm64code)
+						jmpLen = len(arm64code)
+						jmpLocOff = 8
+					} else {
+						copy(codeByte[jmpOff:], armcode)
+						jmpLen = len(armcode)
+						jmpLocOff = 4
+					}
+					*(*uintptr)(unsafe.Pointer(&(codeByte[jmpOff+jmpLocOff:][0]))) = uintptr(symAddrs[loc.SymOff] + add*4)
+					jmpOff += jmpLen
 					continue
 				}
-				b := code.Code[loc.Offset:]
 				var v = uint32(offset)
+				b := code.Code[loc.Offset:]
 				b[0] = byte(v)
 				b[1] = byte(v >> 8)
 				b[2] = byte(v >> 16)
+			case R_ADDRARM64:
+				if curSym.Kind != STEXT {
+					strWrite(&errBuf, "not in code?\n")
+				}
+				relocADRP(code.Code[loc.Offset:], base+loc.Offset, symAddrs[loc.SymOff], sym.Name)
 			case R_ADDR:
 				var relocByte = code.Data
 				if curSym.Kind == STEXT {
@@ -504,22 +530,60 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 	}
 	for _, it := range codeModule.itabs {
 		symAddr := codeModule.itabSyms[it.symOff].ptr
-		offset := symAddr - it.pc
-		if offset > 2147483647 || offset < -2147483647 {
-			offset = (base + jmpOff) - it.pc
+		switch it.locType {
+		case R_PCREL:
+			pc := base + it.locOff + it.size
+			offset := symAddr - pc
+			if offset > 2147483647 || offset < -2147483647 {
+				offset = (base + jmpOff) - pc
+				binary.LittleEndian.PutUint32(codeByte[it.locOff:], uint32(offset))
+				codeByte[it.locOff-2:][0] = movcode
+				*(*uintptr)(unsafe.Pointer(&(codeByte[jmpOff:][0]))) = uintptr(symAddr)
+				jmpOff += PtrSize
+				continue
+			}
 			binary.LittleEndian.PutUint32(codeByte[it.locOff:], uint32(offset))
-			codeByte[it.locOff-2:][0] = movcode
-			*(*uintptr)(unsafe.Pointer(&(codeByte[jmpOff:][0]))) = uintptr(symAddr)
-			jmpOff += PtrSize
-			continue
+		case R_ADDRARM64:
+			relocADRP(codeByte[it.locOff:], base+it.locOff, symAddr, "unknown")
 		}
-		binary.LittleEndian.PutUint32(codeByte[it.locOff:], uint32(offset))
 	}
 
 	if errBuf.Len() > 0 {
 		return &codeModule, errors.New(errBuf.String())
 	}
 	return &codeModule, nil
+}
+
+func relocADRP(mCode []byte, pc int, symAddr int, symName string) {
+	pcPage := pc - pc&0xfff
+	lowOff := symAddr & 0xfff
+	symPage := symAddr - lowOff
+	pageOff := symPage - pcPage
+	if pageOff >= 1<<32 || pageOff < -1<<32 {
+		fmt.Println("adrp overflow!", symName, symAddr, symAddr < (1<<32))
+		movlow := binary.LittleEndian.Uint32(mov32bit[:4])
+		movhigh := binary.LittleEndian.Uint32(mov32bit[4:])
+		adrp := binary.LittleEndian.Uint32(mCode)
+		symAddrUint32 := uint32(symAddr)
+		movlow = (((adrp & 0x1f) | movlow) | ((symAddrUint32 & 0xffff) << 5))
+		movhigh = (((adrp & 0x1f) | movhigh) | ((symAddrUint32 & 0xffff0000) >> 16 << 5))
+		fmt.Println(adrp, movlow, movhigh)
+		binary.LittleEndian.PutUint32(mCode, movlow)
+		binary.LittleEndian.PutUint32(mCode[4:], movhigh)
+		return
+	}
+	fmt.Println("pageOff<0:", pageOff < 0)
+	// 2bit + 19bit + low(12bit) = 33bit
+	pageAnd := (uint32((pageOff>>12)&3) << 29) | (uint32((pageOff>>15)&0x7ffff) << 5)
+
+	adrp := binary.LittleEndian.Uint32(mCode)
+	adrp = adrp | pageAnd
+	binary.LittleEndian.PutUint32(mCode, adrp)
+
+	lowOff = lowOff << 10
+	adrpAdd := binary.LittleEndian.Uint32(mCode[4:])
+	adrpAdd = adrpAdd | uint32(lowOff)
+	binary.LittleEndian.PutUint32(mCode[4:], adrpAdd)
 }
 
 func copy2Slice(dst []byte, src unsafe.Pointer, size int) {
