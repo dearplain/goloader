@@ -314,6 +314,9 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 		itabSymMap[curSym.Name] = len(codeModule.itabSyms)
 		codeModule.itabSyms = append(codeModule.itabSyms, itabSym{inter: sym1, _type: sym2})
 
+		if sym1 == -1 || sym2 == -1 {
+			continue
+		}
 		addIFaceSubFuncType(funcTypeMap, codeModule.typemap,
 			(*interfacetype)(unsafe.Pointer(uintptr(sym1))), base)
 	}
@@ -527,10 +530,16 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 
 	for i := range codeModule.itabSyms {
 		it := &codeModule.itabSyms[i]
+		if it.inter == -1 || it._type == -1 {
+			continue
+		}
 		it.ptr = getitab(it.inter, it._type, false)
 	}
 	for _, it := range codeModule.itabs {
 		symAddr := codeModule.itabSyms[it.symOff].ptr
+		if symAddr == 0 {
+			continue
+		}
 		switch it.locType {
 		case R_PCREL:
 			pc := base + it.locOff + it.size
