@@ -37,8 +37,9 @@ func block()
 func RegSymbol(symPtr map[string]uintptr) {
 
 	var int0 = int(0)
-	RegTypes(symPtr, int(0), int8(0), int16(0), int32(0),
-		int64(0), uint(0), uint8(0), uint16(0), uint32(0), uint64(0), true, &int0,
+	RegTypes(symPtr, int(0), int8(0), int16(0), int32(0), int64(0),
+		uint(0), uint8(0), uint16(0), uint32(0), uint64(0), true, &int0,
+		float32(0), float64(0), complex64(0), complex128(0),
 		"", []byte{}, []uint{}, []int{}, uintptr(0), make(chan bool, 1), unsafe.Pointer(&symPtr))
 	RegFunc(symPtr, "runtime.block", block)
 
