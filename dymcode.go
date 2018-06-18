@@ -124,6 +124,11 @@ type itabReloc struct {
 	add     int
 }
 
+type symFile struct {
+	sym  *goobj.Sym
+	file *os.File
+}
+
 var (
 	tmpModule   interface{}
 	modules     = make(map[interface{}]bool)
@@ -132,14 +137,17 @@ var (
 )
 
 func ReadObj(f *os.File) (*CodeReloc, error) {
-	obj, err := goobj.Parse(f, "main")
+	obj, err := goobj.Parse(f, `""`)
 	if err != nil {
 		return nil, fmt.Errorf("read error: %v", err)
 	}
 
-	var syms = make(map[string]*goobj.Sym)
+	var syms = make(map[string]symFile)
 	for _, sym := range obj.Syms {
-		syms[sym.Name] = sym
+		syms[sym.Name] = symFile{
+			sym:  sym,
+			file: f,
+		}
 	}
 
 	var symMap = make(map[string]int)
@@ -150,8 +158,61 @@ func ReadObj(f *os.File) (*CodeReloc, error) {
 
 	for _, sym := range obj.Syms {
 		if sym.Kind == STEXT {
-			relocSym(&reloc, f, sym, syms, symMap,
+			relocSym(&reloc, symFile{sym: sym,
+				file: f}, syms, symMap,
 				gcObjs, fileTabOffsetMap)
+		}
+	}
+
+	return &reloc, nil
+}
+
+func ReadObjs(files []string, pkgPath []string) (*CodeReloc, error) {
+
+	var fs []*os.File
+	for _, file := range files {
+		f, err := os.Open(file)
+		if err != nil {
+			return nil, err
+		}
+		fs = append(fs, f)
+		defer f.Close()
+	}
+
+	var allSyms = make(map[string]symFile)
+
+	var symMap = make(map[string]int)
+	var gcObjs = make(map[string]uintptr)
+	var fileTabOffsetMap = make(map[string]int)
+
+	var reloc CodeReloc
+
+	var goObjs []*goobj.Package
+	for i, f := range fs {
+		if pkgPath[i] == "" {
+			pkgPath[i] = "main"
+		}
+		obj, err := goobj.Parse(f, pkgPath[i])
+		if err != nil {
+			return nil, fmt.Errorf("read error: %v", err)
+		}
+
+		for _, sym := range obj.Syms {
+			allSyms[sym.Name] = symFile{
+				sym:  sym,
+				file: f,
+			}
+		}
+		goObjs = append(goObjs, obj)
+	}
+
+	for i, obj := range goObjs {
+		for _, sym := range obj.Syms {
+			if sym.Kind == STEXT {
+				relocSym(&reloc, symFile{sym: sym,
+					file: fs[i]}, allSyms, symMap,
+					gcObjs, fileTabOffsetMap)
+			}
 		}
 	}
 
@@ -183,28 +244,28 @@ func (r *readAtSeeker) ReadAt(p []byte, offset int64) (n int, err error) {
 	return r.Read(p)
 }
 
-func relocSym(reloc *CodeReloc, f io.ReadSeeker, sym *goobj.Sym,
-	syms map[string]*goobj.Sym, symMap map[string]int,
+func relocSym(reloc *CodeReloc, curSym symFile,
+	allSyms map[string]symFile, symMap map[string]int,
 	gcObjs map[string]uintptr, fileTabOffsetMap map[string]int) int {
 
-	if curSymOffset, ok := symMap[sym.Name]; ok {
+	if curSymOffset, ok := symMap[curSym.sym.Name]; ok {
 		return curSymOffset
 	}
 
 	var rsym SymData
-	rsym.Name = sym.Name
-	rsym.Kind = int(sym.Kind)
+	rsym.Name = curSym.sym.Name
+	rsym.Kind = int(curSym.sym.Kind)
 	curSymOffset := addSym(symMap, &reloc.Syms, &rsym)
 
-	code := make([]byte, sym.Data.Size)
-	f.Seek(sym.Data.Offset, io.SeekStart)
-	_, err := f.Read(code)
+	code := make([]byte, curSym.sym.Data.Size)
+	curSym.file.Seek(curSym.sym.Data.Offset, io.SeekStart)
+	_, err := curSym.file.Read(code)
 	mustOK(err)
-	switch int(sym.Kind) {
+	switch int(curSym.sym.Kind) {
 	case STEXT:
 		rsym.Offset = len(reloc.Code)
 		reloc.Code = append(reloc.Code, code...)
-		readFuncData(&reloc.Mod, sym, f, syms, gcObjs,
+		readFuncData(&reloc.Mod, curSym, allSyms, gcObjs,
 			fileTabOffsetMap, curSymOffset, rsym.Offset)
 	default:
 		rsym.Offset = len(reloc.Data)
@@ -212,10 +273,10 @@ func relocSym(reloc *CodeReloc, f io.ReadSeeker, sym *goobj.Sym,
 	}
 	addSym(symMap, &reloc.Syms, &rsym)
 
-	for _, re := range sym.Reloc {
+	for _, re := range curSym.sym.Reloc {
 		symOff := -1
-		if s, ok := syms[re.Sym.Name]; ok {
-			symOff = relocSym(reloc, f, s, syms, symMap,
+		if s, ok := allSyms[re.Sym.Name]; ok {
+			symOff = relocSym(reloc, s, allSyms, symMap,
 				gcObjs, fileTabOffsetMap)
 		} else {
 			var exSym SymData

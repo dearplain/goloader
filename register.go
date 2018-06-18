@@ -55,7 +55,8 @@ func RegSymbol(symPtr map[string]uintptr) {
 			symPtr[sym.Name] = uintptr(sym.Addr)
 		} else if strings.HasPrefix(sym.Name, "runtime.") {
 			symPtr[sym.Name] = uintptr(sym.Addr)
-		} else if strings.HasPrefix(sym.Name, "go.itab") {
+		}
+		if strings.HasPrefix(sym.Name, "go.itab") {
 			RegItab(symPtr, sym.Name, uintptr(sym.Addr))
 		}
 	}

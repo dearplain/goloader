@@ -1,9 +1,7 @@
 package goloader
 
 import (
-	"cmd/objfile/goobj"
 	"fmt"
-	"io"
 	"reflect"
 	"strings"
 	"unsafe"
@@ -147,11 +145,12 @@ const minfunc = 16                 // minimum function size
 const pcbucketsize = 256 * minfunc // size of bucket in the pc->func lookup table
 const nsub = len(findfuncbucket{}.subbuckets)
 
-func readFuncData(module *Module, sym *goobj.Sym, f io.ReadSeeker,
-	syms map[string]*goobj.Sym, gcObjs map[string]uintptr,
+func readFuncData(module *Module, curSymFile symFile,
+	allSyms map[string]symFile, gcObjs map[string]uintptr,
 	fileTabOffsetMap map[string]int, curSymOffset, curCodeLen int) {
 
-	fs := readAtSeeker{ReadSeeker: f}
+	fs := readAtSeeker{ReadSeeker: curSymFile.file}
+	curSym := curSymFile.sym
 
 	{
 		x := curCodeLen
@@ -171,9 +170,9 @@ func readFuncData(module *Module, sym *goobj.Sym, f io.ReadSeeker,
 	var fileTabOffset = len(module.filetab)
 	var fileOffsets []uint32
 	var fullFile string
-	for _, fileName := range sym.Func.File {
+	for _, fileName := range curSym.Func.File {
 		fileOffsets = append(fileOffsets, uint32(len(fullFile)+len(module.pclntable)))
-		fileName = strings.TrimLeft(sym.Func.File[0], "gofile..")
+		fileName = strings.TrimLeft(curSym.Func.File[0], "gofile..")
 		fullFile += fileName + "\x00"
 	}
 	if tabOffset, ok := fileTabOffsetMap[fullFile]; !ok {
@@ -190,41 +189,41 @@ func readFuncData(module *Module, sym *goobj.Sym, f io.ReadSeeker,
 	pcFileHead[0] = byte(fileTabOffset << 1)
 
 	nameOff := len(module.pclntable)
-	nameByte := make([]byte, len(sym.Name)+1)
-	copy(nameByte, []byte(sym.Name))
+	nameByte := make([]byte, len(curSym.Name)+1)
+	copy(nameByte, []byte(curSym.Name))
 	module.pclntable = append(module.pclntable, nameByte...)
 
 	spOff := len(module.pclntable)
-	var fb = make([]byte, sym.Func.PCSP.Size)
-	fs.ReadAt(fb, sym.Func.PCSP.Offset)
+	var fb = make([]byte, curSym.Func.PCSP.Size)
+	fs.ReadAt(fb, curSym.Func.PCSP.Offset)
 	// fmt.Println("sp val:", fb)
 	module.pclntable = append(module.pclntable, fb...)
 
 	pcfileOff := len(module.pclntable)
-	fb = make([]byte, sym.Func.PCFile.Size)
-	fs.ReadAt(fb, sym.Func.PCFile.Offset)
+	fb = make([]byte, curSym.Func.PCFile.Size)
+	fs.ReadAt(fb, curSym.Func.PCFile.Offset)
 	// dumpPCData(fb, "pcfile")
 	module.pclntable = append(module.pclntable, pcFileHead[:]...)
 	module.pclntable = append(module.pclntable, fb...)
 
 	pclnOff := len(module.pclntable)
-	fb = make([]byte, sym.Func.PCLine.Size)
-	fs.ReadAt(fb, sym.Func.PCLine.Offset)
+	fb = make([]byte, curSym.Func.PCLine.Size)
+	fs.ReadAt(fb, curSym.Func.PCLine.Offset)
 	module.pclntable = append(module.pclntable, fb...)
 
 	fdata := _func{
 		entry:     uintptr(curSymOffset),
 		nameoff:   int32(nameOff),
-		args:      int32(sym.Func.Args),
+		args:      int32(curSym.Func.Args),
 		pcsp:      int32(spOff),
 		pcfile:    int32(pcfileOff),
 		pcln:      int32(pclnOff),
-		npcdata:   int32(len(sym.Func.PCData)),
-		nfuncdata: int32(len(sym.Func.FuncData)),
+		npcdata:   int32(len(curSym.Func.PCData)),
+		nfuncdata: int32(len(curSym.Func.FuncData)),
 	}
 	var fInfo funcInfoData
 	fInfo._func = fdata
-	for _, data := range sym.Func.PCData {
+	for _, data := range curSym.Func.PCData {
 		fInfo.pcdata = append(fInfo.pcdata, uint32(len(module.pclntable)))
 
 		var b = make([]byte, data.Size)
@@ -232,12 +231,13 @@ func readFuncData(module *Module, sym *goobj.Sym, f io.ReadSeeker,
 		// dumpPCData(b)
 		module.pclntable = append(module.pclntable, b...)
 	}
-	for _, data := range sym.Func.FuncData {
+	for _, data := range curSym.Func.FuncData {
 		var offset uintptr
 		if off, ok := gcObjs[data.Sym.Name]; !ok {
-			if gcobj, ok := syms[data.Sym.Name]; ok {
-				var b = make([]byte, gcobj.Data.Size)
-				fs.ReadAt(b, gcobj.Data.Offset)
+			if gcobj, ok := allSyms[data.Sym.Name]; ok {
+				var b = make([]byte, gcobj.sym.Data.Size)
+				cfs := readAtSeeker{ReadSeeker: gcobj.file}
+				cfs.ReadAt(b, gcobj.sym.Data.Offset)
 				offset = uintptr(len(module.stkmaps))
 				module.stkmaps = append(module.stkmaps, b)
 				gcObjs[data.Sym.Name] = offset
