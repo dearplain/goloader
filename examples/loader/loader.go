@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"reflect"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -22,10 +22,31 @@ func mustOK(err error) {
 	}
 }
 
+type arrayFlags struct {
+	File    []string
+	PkgPath []string
+}
+
+func (i *arrayFlags) String() string {
+	return "my string representation"
+}
+
+func (i *arrayFlags) Set(value string) error {
+	s := strings.Split(value, ":")
+	i.File = append(i.File, s[0])
+	var path string
+	if len(s) > 1 {
+		path = s[1]
+	}
+	i.PkgPath = append(i.PkgPath, path)
+	return nil
+}
+
 func main() {
 
-	var file = flag.String("o", "", "load go object file")
-	var pkgpath = flag.String("p", "main", "package path")
+	var files arrayFlags
+	flag.Var(&files, "o", "load go object file")
+	var pkgpath = flag.String("p", "", "package path")
 	var parseFile = flag.String("parse", "", "parse go object file")
 	var run = flag.String("run", "main.main", "run function")
 	var times = flag.Int("times", 1, "run count")
@@ -37,32 +58,28 @@ func main() {
 		return
 	}
 
-	if *file == "" {
+	if len(files.File) == 0 {
 		flag.PrintDefaults()
 		return
 	}
 
-	f, err := os.Open(*file)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer f.Close()
-
 	symPtr := make(map[string]uintptr)
 	goloader.RegSymbol(symPtr)
 
-	goloader.RegTypes(symPtr, time.Duration(0))
-	goloader.RegTypes(symPtr, reflect.ValueOf(0))
+	goloader.RegTypes(symPtr, time.Duration(0), time.Unix(0, 0))
 	goloader.RegTypes(symPtr, runtime.LockOSThread)
 	// most of time you don't need to register function, but if loader complain about it, you have to.
 	goloader.RegTypes(symPtr, http.ListenAndServe, http.Dir("/"),
 		http.Handler(http.FileServer(http.Dir("/"))), http.FileServer, http.HandleFunc,
 		&http.Request{})
 	w := sync.WaitGroup{}
-	goloader.RegTypes(symPtr, w, w.Wait)
+	rw := sync.RWMutex{}
+	goloader.RegTypes(symPtr, &w, w.Wait, &rw)
 
-	reloc, _ := goloader.ReadObj(f)
+	reloc, err := goloader.ReadObjs(files.File, files.PkgPath)
+	if err != nil {
+		fmt.Println(err)
+	}
 
 	var mmapByte []byte
 	for i := 0; i < *times; i++ {

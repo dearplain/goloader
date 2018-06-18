@@ -137,7 +137,7 @@ var (
 )
 
 func ReadObj(f *os.File) (*CodeReloc, error) {
-	obj, err := goobj.Parse(f, `""`)
+	obj, err := goobj.Parse(f, "main")
 	if err != nil {
 		return nil, fmt.Errorf("read error: %v", err)
 	}
