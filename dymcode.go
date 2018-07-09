@@ -340,13 +340,11 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 	var itabIndexs []int
 	var funcTypeMap = make(map[string]*int)
 	for i, sym := range code.Syms {
-		if sym.Offset == -1 {
-			if ptr, ok := symPtr[sym.Name]; ok {
-				symAddrs[i] = int(ptr)
-			} else {
-				symAddrs[i] = -1
-				strWrite(&errBuf, "unresolve external:", sym.Name, "\n")
-			}
+		if ptr, ok := symPtr[sym.Name]; ok {
+			symAddrs[i] = int(ptr)
+		} else if sym.Offset == -1 {
+			symAddrs[i] = -1
+			strWrite(&errBuf, "unresolve external:", sym.Name, "\n")
 		} else if sym.Name == TLSNAME {
 			RegTLS(symPtr, sym.Offset)
 		} else if sym.Kind == STEXT {
