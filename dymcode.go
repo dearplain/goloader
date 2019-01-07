@@ -635,15 +635,15 @@ func relocADRP(mCode []byte, pc int, symAddr int, symName string) {
 	lowOff := symAddr & 0xfff
 	symPage := symAddr - lowOff
 	pageOff := symPage - pcPage
-	if pageOff >= 1<<32 || pageOff < -1<<32 {
-		fmt.Println("adrp overflow!", symName, symAddr, symAddr < (1<<32))
+	if pageOff > 1<<31 || pageOff < -1<<31 {
+		// fmt.Println("adrp overflow!", symName, symAddr, symAddr < (1<<31))
 		movlow := binary.LittleEndian.Uint32(mov32bit[:4])
 		movhigh := binary.LittleEndian.Uint32(mov32bit[4:])
 		adrp := binary.LittleEndian.Uint32(mCode)
 		symAddrUint32 := uint32(symAddr)
 		movlow = (((adrp & 0x1f) | movlow) | ((symAddrUint32 & 0xffff) << 5))
 		movhigh = (((adrp & 0x1f) | movhigh) | ((symAddrUint32 & 0xffff0000) >> 16 << 5))
-		fmt.Println(adrp, movlow, movhigh)
+		// fmt.Println(adrp, movlow, movhigh)
 		binary.LittleEndian.PutUint32(mCode, movlow)
 		binary.LittleEndian.PutUint32(mCode[4:], movhigh)
 		return
