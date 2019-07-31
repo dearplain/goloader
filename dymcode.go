@@ -392,6 +392,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 	var x86code = []byte{0xff, 0x25, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 	var movcode byte = 0x8b
 	var leacode byte = 0x8d
+	var cmplcode byte = 0x83
 	var jmpOff = pCodeLen
 	for _, curSym := range code.Syms {
 		for _, loc := range curSym.Reloc {
@@ -435,6 +436,11 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 						offset = (base + jmpOff) - (addrBase + loc.Offset + loc.Size)
 						binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
 						rb[0] = movcode
+						binary.LittleEndian.PutUint32(codeByte[jmpOff:], uint32(symAddrs[loc.SymOff]+loc.Add))
+						jmpOff += 8
+					} else if rb[0] == cmplcode {
+						offset = (base + jmpOff) - (addrBase + loc.Offset + loc.Size)
+						binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
 						binary.LittleEndian.PutUint32(codeByte[jmpOff:], uint32(symAddrs[loc.SymOff]+loc.Add))
 						jmpOff += 8
 					} else {
@@ -567,7 +573,11 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 		var funcdata = make([]uintptr, len(fi.funcdata))
 		copy(funcdata, fi.funcdata)
 		for i, v := range funcdata {
-			funcdata[i] = (uintptr)(unsafe.Pointer(&(code.Mod.stkmaps[v][0])))
+			if v != 0 {
+				funcdata[i] = (uintptr)(unsafe.Pointer(&(code.Mod.stkmaps[v][0])))
+			} else {
+				funcdata[i] = 0 
+			}
 		}
 		ptr := (uintptr)(unsafe.Pointer(&module.pclntable[pclnOff-1])) + 1
 		if PtrSize == 8 && ptr&4 != 0 {

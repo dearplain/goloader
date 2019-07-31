@@ -233,6 +233,10 @@ func readFuncData(module *Module, curSymFile symFile,
 	}
 	for _, data := range curSym.Func.FuncData {
 		var offset uintptr
+		if data.Sym.Name == "" {
+			fInfo.funcdata = append(fInfo.funcdata, 0)
+			continue
+		}
 		if off, ok := gcObjs[data.Sym.Name]; !ok {
 			if gcobj, ok := allSyms[data.Sym.Name]; ok {
 				var b = make([]byte, gcobj.sym.Data.Size)
