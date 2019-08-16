@@ -30,9 +30,6 @@ type sliceHeader struct {
 	Cap  int
 }
 
-//go:linkname block runtime.block
-func block()
-
 // RegSymbol register common types for relocation
 func RegSymbol(symPtr map[string]uintptr) {
 
@@ -41,7 +38,6 @@ func RegSymbol(symPtr map[string]uintptr) {
 		uint(0), uint8(0), uint16(0), uint32(0), uint64(0), true, &int0,
 		float32(0), float64(0), complex64(0), complex128(0),
 		"", []byte{}, []uint{}, []int{}, uintptr(0), make(chan bool, 1), unsafe.Pointer(&symPtr))
-	RegFunc(symPtr, "runtime.block", block)
 
 	ex, err := os.Executable()
 	mustOK(err)
