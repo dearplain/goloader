@@ -393,6 +393,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 	var movcode byte = 0x8b
 	var leacode byte = 0x8d
 	var cmplcode byte = 0x83
+	var jmpcode byte = 0xe9
 	var jmpOff = pCodeLen
 	for _, curSym := range code.Syms {
 		for _, loc := range curSym.Reloc {
@@ -430,19 +431,25 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 						offset = (base + jmpOff) - (addrBase + loc.Offset + loc.Size)
 						copy(codeByte[jmpOff:], x86code)
 						binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
-						binary.LittleEndian.PutUint32(codeByte[jmpOff+6:], uint32(symAddrs[loc.SymOff]+loc.Add))
+						if uint64(symAddrs[loc.SymOff]+loc.Add) > 0xFFFFFFFF {
+							binary.LittleEndian.PutUint64(codeByte[jmpOff+6:], uint64(symAddrs[loc.SymOff]+loc.Add))
+						} else {
+							binary.LittleEndian.PutUint32(codeByte[jmpOff+6:], uint32(symAddrs[loc.SymOff]+loc.Add))
+						}
 						jmpOff += len(x86code)
-					} else if rb[0] == leacode || rb[0] == movcode {
+					} else if rb[0] == leacode || rb[0] == movcode || rb[0] == cmplcode || rb[1] == jmpcode {
 						offset = (base + jmpOff) - (addrBase + loc.Offset + loc.Size)
 						binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
-						rb[0] = movcode
-						binary.LittleEndian.PutUint32(codeByte[jmpOff:], uint32(symAddrs[loc.SymOff]+loc.Add))
-						jmpOff += 8
-					} else if rb[0] == cmplcode {
-						offset = (base + jmpOff) - (addrBase + loc.Offset + loc.Size)
-						binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
-						binary.LittleEndian.PutUint32(codeByte[jmpOff:], uint32(symAddrs[loc.SymOff]+loc.Add))
-						jmpOff += 8
+						if rb[0] == leacode {
+							rb[0] = movcode
+						}
+						if uint64(symAddrs[loc.SymOff]+loc.Add) > 0xFFFFFFFF {
+							binary.LittleEndian.PutUint64(codeByte[jmpOff:], uint64(symAddrs[loc.SymOff]+loc.Add))
+							jmpOff += 16
+						} else {
+							binary.LittleEndian.PutUint32(codeByte[jmpOff:], uint32(symAddrs[loc.SymOff]+loc.Add))
+							jmpOff += 8
+						}
 					} else {
 						strWrite(&errBuf, "offset overflow sym:", sym.Name, "\n")
 						binary.LittleEndian.PutUint32(relocByte[loc.Offset:], uint32(offset))
@@ -576,7 +583,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 			if v != 0 {
 				funcdata[i] = (uintptr)(unsafe.Pointer(&(code.Mod.stkmaps[v][0])))
 			} else {
-				funcdata[i] = 0 
+				funcdata[i] = (uintptr)(0)
 			}
 		}
 		ptr := (uintptr)(unsafe.Pointer(&module.pclntable[pclnOff-1])) + 1
