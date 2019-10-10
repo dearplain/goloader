@@ -421,7 +421,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 					relocByte = code.Code
 				}
 				offset = symAddrs[loc.SymOff] - (addrBase + loc.Offset + loc.Size) + loc.Add
-				if offset > 0x7fffffff || offset < -0x7fffffff {
+				if offset > 0x7fffffff || offset < -0x8000000 {
 					if jmpOff+8 > codeLen {
 						strWrite(&errBuf, "len overflow", "sym:", sym.Name, "\n")
 						continue
@@ -470,7 +470,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 					pcOff = 8
 				}
 				offset = (symAddrs[loc.SymOff] - (base + loc.Offset + pcOff) + add) / 4
-				if offset > 0x7fffff || offset < -0x7fffff {
+				if offset > 0x7FFFFF || offset < -0x800000 {
 					if jmpOff+4 > codeLen {
 						strWrite(&errBuf, "len overflow", "sym:", sym.Name, "\n")
 						continue
@@ -627,7 +627,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 		case R_PCREL:
 			pc := base + it.locOff + it.size
 			offset := symAddr - pc + it.add
-			if offset > 2147483647 || offset < -2147483647 {
+			if offset > 0x7FFFFFFF || offset < -0x80000000 {
 				offset = (base + jmpOff) - pc + it.add
 				binary.LittleEndian.PutUint32(codeByte[it.locOff:], uint32(offset))
 				codeByte[it.locOff-2:][0] = movcode
