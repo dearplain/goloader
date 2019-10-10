@@ -445,7 +445,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 						}
 						if uint64(symAddrs[loc.SymOff]+loc.Add) > 0xFFFFFFFF {
 							binary.LittleEndian.PutUint64(codeByte[jmpOff:], uint64(symAddrs[loc.SymOff]+loc.Add))
-							jmpOff += 16
+							jmpOff += 12
 						} else {
 							binary.LittleEndian.PutUint32(codeByte[jmpOff:], uint32(symAddrs[loc.SymOff]+loc.Add))
 							jmpOff += 8
