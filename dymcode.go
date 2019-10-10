@@ -539,7 +539,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 	copy(module.ftab, code.Mod.ftab)
 	pclnOff := len(code.Mod.pclntable)
 	module.pclntable = make([]byte, len(code.Mod.pclntable)+
-		(_funcSize+100)*len(code.Mod.ftab))
+		(_funcSize+256)*len(code.Mod.ftab))
 	copy(module.pclntable, code.Mod.pclntable)
 	module.findfunctab = (uintptr)(unsafe.Pointer(&code.Mod.pcfunc[0]))
 	module.minpc = (uintptr)(unsafe.Pointer(&codeByte[0]))
@@ -553,10 +553,6 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 	codeModule.pcfuncdata = code.Mod.pcfunc // hold reference
 	codeModule.stkmaps = code.Mod.stkmaps
 	for i := range module.ftab {
-		if i == 0 {
-			continue
-		}
-
 		module.ftab[i].entry = uintptr(symAddrs[int(code.Mod.ftab[i].entry)])
 
 		ptr2 := (uintptr)(unsafe.Pointer(&module.pclntable[pclnOff]))
@@ -564,7 +560,7 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 			pclnOff += 4
 		}
 		module.ftab[i].funcoff = uintptr(pclnOff)
-		fi := code.Mod.funcinfo[i-1]
+		fi := code.Mod.funcinfo[i]
 		fi.entry = module.ftab[i].entry
 		copy2Slice(module.pclntable[pclnOff:],
 			unsafe.Pointer(&fi._func), _funcSize)
@@ -599,9 +595,13 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 
 	}
 	module.pclntable = module.pclntable[:pclnOff]
-	if len(module.ftab) >= 2 {
-		module.ftab[0] = module.ftab[1]
+	module.ftab = append(module.ftab, functab{})
+	for i:= len(module.ftab)-1; i > 0; i-- { 
+		module.ftab[i] = module.ftab[i-1]
 	}
+	module.ftab = append(module.ftab, functab{})
+	module.ftab[0].entry = module.minpc
+	module.ftab[len(module.ftab)-1].entry = module.maxpc 
 
 	modulesLock.Lock()
 	addModule(&codeModule, &module, runtime.Version())

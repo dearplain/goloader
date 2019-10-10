@@ -161,9 +161,6 @@ func readFuncData(module *Module, curSymFile symFile,
 				idx: uint32(256 * len(module.pcfunc))})
 		}
 		bucket := &module.pcfunc[b]
-		if len(module.ftab) <= 0 {
-			module.ftab = append(module.ftab, functab{})
-		}
 		bucket.subbuckets[i] = byte(len(module.ftab) - int(bucket.idx))
 	}
 
