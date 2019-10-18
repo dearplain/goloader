@@ -596,12 +596,12 @@ func Load(code *CodeReloc, symPtr map[string]uintptr) (*CodeModule, error) {
 	}
 	module.pclntable = module.pclntable[:pclnOff]
 	module.ftab = append(module.ftab, functab{})
-	for i:= len(module.ftab)-1; i > 0; i-- { 
+	for i := len(module.ftab) - 1; i > 0; i-- {
 		module.ftab[i] = module.ftab[i-1]
 	}
 	module.ftab = append(module.ftab, functab{})
 	module.ftab[0].entry = module.minpc
-	module.ftab[len(module.ftab)-1].entry = module.maxpc 
+	module.ftab[len(module.ftab)-1].entry = module.maxpc
 
 	modulesLock.Lock()
 	addModule(&codeModule, &module, runtime.Version())
@@ -652,7 +652,7 @@ func relocADRP(mCode []byte, pc int, symAddr int, symName string) {
 	lowOff := symAddr & 0xfff
 	symPage := symAddr - lowOff
 	pageOff := symPage - pcPage
-	if pageOff > 1<<31 || pageOff < -1<<31 {
+	if pageOff > 0x7FFFFFFF || pageOff < -0x80000000 {
 		// fmt.Println("adrp overflow!", symName, symAddr, symAddr < (1<<31))
 		movlow := binary.LittleEndian.Uint32(mov32bit[:4])
 		movhigh := binary.LittleEndian.Uint32(mov32bit[4:])
