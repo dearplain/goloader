@@ -1,8 +1,6 @@
 
 # Goloader
 
-[![Build Status](https://travis-ci.org/dearplain/goloader.svg?branch=master)](https://travis-ci.org/dearplain/goloader)
-
 Goloader can load and run Golang code at runtime.
 
 ## How does it work?
@@ -45,15 +43,9 @@ go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/http/http.go
 #build multiple go files
 go tool compile -I $GOPATH/pkg/darwin_amd64 1.go 2.go
 
-#build for arm32
-GOOS=linux GOARCH=arm GOARM=5 go install fmt runtime sync net/http time
-GOOS=linux GOARCH=arm GOARM=5 go build github.com/dearplain/goloader/examples/loader
-GOOS=linux GOARCH=arm GOARM=5 go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/base/base.go
-#test on arm32 linux
-./loader -o base.o -run main.main
 ```
 
 ## Warning
 
-This has currently only been tested and developed on Golang 1.8, 1.9, and 1.10 (x64/x86, darwin, linux, windows).
+This has currently only been tested and developed on Golang 1.8, 1.9, 1.10, 1.11, 1.12(golang.1.12), 1.13(golang.1.13) (x64/x86, darwin, linux, windows).
 Be aware of Golang's internal structs change, especially the moduledata struct.
