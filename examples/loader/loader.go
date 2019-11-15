@@ -12,7 +12,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/dearplain/goloader"
+	"github.com/pkujhd/goloader"
 	"github.com/kr/pretty"
 )
 
