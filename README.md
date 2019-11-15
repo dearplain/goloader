@@ -29,15 +29,15 @@ cp -r $GOROOT/src/cmd/internal $GOROOT/src/cmd/objfile
 ## Examples
 
 ```
-go build github.com/dearplain/goloader/examples/loader
+go build github.com/pkujhd/goloader/examples/loader
 
-go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/schedule/schedule.go
+go tool compile $GOPATH/src/github.com/pkujhd/goloader/examples/schedule/schedule.go
 ./loader -o schedule.o -run main.main -times 10
 
-go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/base/base.go
+go tool compile $GOPATH/src/github.com/pkujhd/goloader/examples/base/base.go
 ./loader -o base.o -run main.main
 
-go tool compile $GOPATH/src/github.com/dearplain/goloader/examples/http/http.go
+go tool compile $GOPATH/src/github.com/pkujhd/goloader/examples/http/http.go
 ./loader -o http.o -run main.main
 
 #build multiple go files
